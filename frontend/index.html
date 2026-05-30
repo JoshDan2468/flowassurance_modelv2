@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flow Assurance Intelligence Platform (FAIP)</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body {
+    font-family: Arial;
+    background: #0f172a;
+    color: white;
+    margin: 30px;
+}
+
+h1 {
+    color: #38bdf8;
+}
+
+/* CARD */
+.card {
+    background: #1e293b;
+    padding: 20px;
+    border-radius: 12px;
+    margin-top: 20px;
+}
+
+/* GRID */
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 15px;
+}
+
+/* INPUT */
+.input-group {
+    display: flex;
+    flex-direction: column;
+}
+
+label {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-bottom: 5px;
+}
+
+input {
+    padding: 8px;
+    border-radius: 6px;
+    border: none;
+}
+
+/* BUTTONS */
+.button-group {
+    margin-top: 20px;
+    text-align: center;
+}
+
+button {
+    padding: 12px 25px;
+    border-radius: 8px;
+    border: none;
+    font-weight: bold;
+    cursor: pointer;
+    margin: 5px;
+    color: white;
+}
+
+.run-btn { background: #3b82f6; }
+.download-btn { background: #22c55e; }
+.clear-btn { background: #ef4444; }
+
+button:hover {
+    opacity: 0.85;
+}
+
+/* RESULT */
+.result-box {
+    background: #020617;
+    padding: 15px;
+    border-radius: 8px;
+    margin-top: 10px;
+    white-space: pre-line;
+}
+
+canvas {
+    margin-top: 20px;
+    background: white;
+    border-radius: 10px;
+    padding: 10px;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Flow Assurance Intelligence Platform (FAIP)</h1>
+
+<!-- INPUT -->
+<div class="card">
+<h3>Pipeline Input Parameters</h3>
+
+<div class="grid">
+
+<div class="input-group"><label>Inlet Temperature (&deg;C)</label><input type="number" step="any" id="T_inlet" value="25"></div>
+<div class="input-group"><label>Pressure (bar)</label><input type="number" step="any" id="P_inlet" value="100"></div>
+<div class="input-group"><label>Gas Flow Rate (m&sup3;/s)</label><input type="number" step="any" id="Q_gas" value="10"></div>
+<div class="input-group"><label>Oil Flow Rate (bbl/d)</label><input type="number" step="any" id="Q_oil" value="20"></div>
+<div class="input-group"><label>Water Flow Rate (bbl/d)</label><input type="number" step="any" id="Q_water" value="5"></div>
+<div class="input-group"><label>Pipe Diameter (m)</label><input type="number" step="any" id="D_pipe" value="0.5"></div>
+<div class="input-group"><label>Seawater Temperature (&deg;C)</label><input type="number" step="any" id="T_seawater" value="5"></div>
+<div class="input-group"><label>Gas Gravity (-)</label><input type="number" step="any" id="gas_gravity" value="0.7"></div>
+<div class="input-group"><label>Oil API Gravity (&deg;API)</label><input type="number" step="any" id="oil_API" value="35"></div>
+<div class="input-group"><label>Water Salinity (%)</label><input type="number" step="any" id="salinity" value="3"></div>
+<div class="input-group"><label>H<sub>2</sub>S Content</label><input type="number" step="any" id="H2S" value="0.01"></div>
+<div class="input-group"><label>CO<sub>2</sub> Content</label><input type="number" step="any" id="CO2" value="0.02"></div>
+<div class="input-group"><label>Wax Content (%)</label><input type="number" step="any" id="wax_content" value="2"></div>
+<div class="input-group"><label>Asphaltene Index</label><input type="number" step="any" id="asphaltene_index" value="1"></div>
+<div class="input-group"><label>Insulation (0/1)</label><input type="number" step="1" id="insulation" value="1"></div>
+<div class="input-group"><label>Chemical Injection (L/hr)</label><input type="number" step="any" id="chemical_injection" value="0.5"></div>
+<div class="input-group"><label>Pipeline Age (days)</label><input type="number" step="any" id="age_days" value="100"></div>
+<div class="input-group"><label>Shutdown Duration (hours)</label><input type="number" step="any" id="shutdown_time" value="12"></div>
+
+</div>
+
+<div class="button-group">
+<button type="button" class="run-btn" onclick="predict()">Run Prediction</button>
+<button type="button" class="download-btn" onclick="downloadReport()">Download Report</button>
+<button type="button" class="clear-btn" onclick="clearInputs()">Clear Inputs</button>
+</div>
+</div>
+
+<!-- SUMMARY -->
+<div class="card">
+<h3>Risk Summary</h3>
+<div id="summary" class="result-box"></div>
+</div>
+
+<!-- INSIGHTS -->
+<div class="card">
+<h3>Engineering Insights</h3>
+<div id="insights" class="result-box"></div>
+</div>
+
+<!-- OBSERVATIONS -->
+<div class="card">
+<h3>Observations</h3>
+<div id="observations" class="result-box"></div>
+</div>
+
+<!-- RECOMMENDATIONS -->
+<div class="card">
+<h3>Recommendations</h3>
+<div id="recommendations" class="result-box"></div>
+</div>
+
+<!-- CHART -->
+<div class="card">
+<h3>Hydrate Risk Visualization</h3>
+<canvas id="chart"></canvas>
+</div>
+
+<script>
+let chart;
+let lastResult = null;
+
+const API_BASE_URL = "http://127.0.0.1:8000";
+const inputIds = [
+    "T_inlet",
+    "P_inlet",
+    "Q_gas",
+    "Q_oil",
+    "Q_water",
+    "D_pipe",
+    "T_seawater",
+    "gas_gravity",
+    "oil_API",
+    "salinity",
+    "H2S",
+    "CO2",
+    "wax_content",
+    "asphaltene_index",
+    "insulation",
+    "chemical_injection",
+    "age_days",
+    "shutdown_time"
+];
+
+function el(id) {
+    return document.getElementById(id);
+}
+
+function valueOf(id) {
+    return el(id).value;
+}
+
+function showError(message) {
+    el("summary").innerText = "Error: " + message;
+    el("insights").innerText = "";
+    el("observations").innerText = "";
+    el("recommendations").innerText = "";
+}
+
+function addWarning(message) {
+    const currentText = el("summary").innerText;
+    el("summary").innerText = currentText + "\nWarning: " + message;
+}
+
+// ================= DATA =================
+function getData() {
+return {
+    T_inlet: parseFloat(valueOf("T_inlet")),
+    P_inlet: parseFloat(valueOf("P_inlet")),
+    Q_gas: parseFloat(valueOf("Q_gas")),
+    Q_oil: parseFloat(valueOf("Q_oil")),
+    Q_water: parseFloat(valueOf("Q_water")),
+    D_pipe: parseFloat(valueOf("D_pipe")),
+    T_seawater: parseFloat(valueOf("T_seawater")),
+    gas_gravity: parseFloat(valueOf("gas_gravity")),
+    oil_API: parseFloat(valueOf("oil_API")),
+    salinity: parseFloat(valueOf("salinity")),
+    H2S: parseFloat(valueOf("H2S")),
+    CO2: parseFloat(valueOf("CO2")),
+    wax_content: parseFloat(valueOf("wax_content")),
+    asphaltene_index: parseFloat(valueOf("asphaltene_index")),
+    insulation: parseInt(valueOf("insulation"), 10),
+    chemical_injection: parseFloat(valueOf("chemical_injection")),
+    age_days: parseFloat(valueOf("age_days")),
+    shutdown_time: parseFloat(valueOf("shutdown_time"))
+};
+}
+
+// ================= PREDICT =================
+async function predict() {
+try {
+const payload = getData();
+
+if (Object.values(payload).some(Number.isNaN)) {
+    showError("Please fill all inputs with valid numbers.");
+    return;
+}
+
+const res = await fetch(API_BASE_URL + "/predict", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payload)
+});
+
+const r = await res.json();
+
+if (!res.ok) {
+    throw new Error(r.error || r.detail || "Prediction request failed.");
+}
+
+lastResult = r;
+
+// SUMMARY
+el("summary").innerText =
+    "Risk Level: " + r.risk_level + "\n" +
+    "Max Subcooling: " + r.physics.max_subcooling.toFixed(2);
+
+// INTELLIGENCE
+el("insights").innerText = r.insights.join("\n");
+el("observations").innerText = r.observations.join("\n");
+el("recommendations").innerText = r.recommendations.join("\n");
+
+// CHART
+if (chart) chart.destroy();
+
+if (typeof Chart === "undefined") {
+    chart = null;
+    addWarning("Chart.js did not load, so the graph is unavailable.");
+    return;
+}
+
+chart = new Chart(el("chart"), {
+    type: "line",
+    data: {
+        labels: r.transient.time,
+        datasets: [
+            {
+                label: "Pipeline Temperature",
+                data: r.transient.temperature_profile,
+                borderWidth: 2
+            },
+            {
+                label: "Hydrate Equilibrium",
+                data: Array(r.transient.time.length).fill(r.transient.hydrate_equilibrium),
+                borderDash: [5,5],
+                borderWidth: 2
+            }
+        ]
+    }
+});
+} catch (error) {
+    showError(error.message);
+}
+}
+
+// ================= DOWNLOAD =================
+async function downloadReport() {
+
+if (!lastResult) {
+    alert("Run prediction first!");
+    return;
+}
+
+const res = await fetch(API_BASE_URL + "/report", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(lastResult)
+});
+
+if (!res.ok) {
+    const r = await res.json();
+    showError(r.error || r.detail || "Report request failed.");
+    return;
+}
+
+const blob = await res.blob();
+const url = URL.createObjectURL(blob);
+
+const a = document.createElement("a");
+a.href = url;
+a.download = "FAIP_Report.pdf";
+a.click();
+URL.revokeObjectURL(url);
+}
+
+// ================= CLEAR =================
+function clearInputs() {
+
+inputIds.forEach(id => el(id).value = "");
+
+el("summary").innerText = "";
+el("insights").innerText = "";
+el("observations").innerText = "";
+el("recommendations").innerText = "";
+
+lastResult = null;
+
+if (chart) chart.destroy();
+}
+</script>
+
+</body>
+</html>
